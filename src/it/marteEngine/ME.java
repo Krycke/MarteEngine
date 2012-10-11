@@ -1,9 +1,7 @@
 package it.marteEngine;
 
 import it.marteEngine.entity.Entity;
-
-import java.util.Hashtable;
-
+import java.util.HashMap;
 import org.newdawn.slick.Color;
 import org.newdawn.slick.GameContainer;
 import org.newdawn.slick.Graphics;
@@ -14,7 +12,7 @@ import org.newdawn.slick.state.StateBasedGame;
 
 /**
  * Marte Engine Utility class
- * 
+ *
  * @author RandomTower
  * @project MarteEngine
  */
@@ -49,8 +47,8 @@ public class ME {
 	public static final String WALK_UP = "walk_Up";
 	public static final String WALK_DOWN = "walk_Down";
 
-	/** utility hashtable for game attributes **/
-	public static Hashtable<String, Object> attributes = new Hashtable<String, Object>();
+	/** utility hashmap for game attributes **/
+	public static HashMap<String, Object> attributes = new HashMap<>();
 
 	public static World world;
 
@@ -73,7 +71,7 @@ public class ME {
 
 	/**
 	 * Update entities and add new entities and remove old entities
-	 * 
+	 *
 	 * @param container
 	 * @param delta
 	 * @throws SlickException
@@ -119,7 +117,7 @@ public class ME {
 
 	/**
 	 * Render entities following camera, show debug information if in debug mode
-	 * 
+	 *
 	 * @param container
 	 * @param g
 	 * @throws SlickException
@@ -146,8 +144,12 @@ public class ME {
 			// int xpos= container.getWidth() - 350;/*130*/
 			int xpos = 0;
 			showMessage(container, g, xpos, ypos, container.getWidth() - 1, 40,
-					20, Color.lightGray, text, 350);
+					20, Color.lightGray, text, 250);
 			container.setShowFPS(true);
+
+//            Rectangle deadzone = world.camera.getDeadzone();
+//            g.drawRect(deadzone.getX()-world.camera.getX(),deadzone.getY()-world.camera.getY(), deadzone.getWidth(), deadzone.getHeight());
+
 
 		} else {
 			container.setShowFPS(false);
@@ -170,7 +172,7 @@ public class ME {
 
 	/**
 	 * Set scale factor for graphics
-	 * 
+	 *
 	 * @param sx
 	 * @param sy
 	 */

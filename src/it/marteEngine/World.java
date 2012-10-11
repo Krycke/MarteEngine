@@ -1,463 +1,469 @@
 package it.marteEngine;
 
-import it.marteEngine.entity.Entity;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-
-import it.marteEngine.entity.InputManager;
-import org.newdawn.slick.Color;
-import org.newdawn.slick.GameContainer;
-import org.newdawn.slick.Graphics;
-import org.newdawn.slick.SlickException;
-import org.newdawn.slick.geom.Rectangle;
-import org.newdawn.slick.state.BasicGameState;
-import org.newdawn.slick.state.StateBasedGame;
+import it.marteEngine.entity.*;
+import it.marteEngine.quadtree.Quadtree;
+import java.util.*;
+import org.newdawn.slick.*;
+import org.newdawn.slick.geom.*;
+import org.newdawn.slick.state.*;
 import org.newdawn.slick.util.Log;
 
 //TODO addAll() muss intern add() aufrufen, um korrekt nach flags in die listen einzusortieren
 public class World extends BasicGameState {
 
-	public static final int BELOW = -1;
-	public static final int GAME = 0;
-	public static final int ABOVE = 1;
+    public static final int BELOW = -1;
+    public static final int GAME = 0;
+    public static final int ABOVE = 1;
+    /** the game container this world belongs to */
+    public GameContainer container = null;
+    /** unique id for every world * */
+    public int id = 0;
+    /** width of the world, useful for horizontal wrapping entities */
+    public int width = 0;
+    /** height of the world, useful for vertical wrapping entities */
+    public int height = 0;
+    /** the map of the world */
+    private Map map = null;
+    /** internal list for entities */
+    private Quadtree quadtree;
+    private List<Entity> removable = new ArrayList<>();
+    private List<Entity> addable = new ArrayList<>();
+    /**
+     * two lists to contain objects that are rendered before and after camera
+     * stuff is rendered
+     */
+    private List<Entity> belowCamera = new ArrayList<>();
+    private List<Entity> aboveCamera = new ArrayList<>();
+    /** current camera * */
+    public Camera camera;
+    public int renderedEntities;
+    /** available commands for world * */
+    protected InputManager input;
 
-	/** the game container this world belongs to */
-	public GameContainer container = null;
+    public World( int id ) {
+        this.id = id;
+        quadtree = new Quadtree( width, height );
+    }
 
-	/** unique id for every world **/
-	public int id = 0;
+    public World( int id, GameContainer container ) {
+        this( id );
+        this.container = container;
+    }
 
-	/** width of the world, useful for horizontal wrapping entitites */
-	public int width = 0;
-	/** height of the world, useful for vertical wrapping entities */
-	public int height = 0;
+    @Override
+    public void init( GameContainer container, StateBasedGame game )
+            throws SlickException {
+        this.container = container;
+        input = new InputManager( container.getInput() );
 
-	/** internal list for entities **/
-	private List<Entity> entities = new ArrayList<Entity>();
-	private List<Entity> removable = new ArrayList<Entity>();
-	private List<Entity> addable = new ArrayList<Entity>();
+        if( width == 0 ) {
+            width = container.getWidth();
+        }
+        if( height == 0 ) {
+            height = container.getHeight();
+        }
+        camera = new Camera( width, height );
+    }
 
-	/**
-	 * two lists to contain objects that are rendered before and after camera
-	 * stuff is rendered
-	 */
-	private List<Entity> belowCamera = new ArrayList<Entity>();
-	private List<Entity> aboveCamera = new ArrayList<Entity>();
+    @Override
+    public void enter( GameContainer container, StateBasedGame game )
+            throws SlickException {
+        ME.world = this;
+    }
 
-	/** current camera **/
-	public Camera camera;
+    @Override
+    public void render( GameContainer container, StateBasedGame game, Graphics g )
+            throws SlickException {
 
-	public int renderedEntities;
+        renderedEntities = 0;
+        // first render entities below camera
+        for( Entity e : belowCamera ) {
+            if( !e.visible ) {
+                continue;
+            }
+            renderEntity( e, g, container );
+        }
+        g.translate( -(camera.getX() - camera.getCameraOffset().getX()), -(camera.getY() - camera.getCameraOffset().getY()) );
 
-	/** available commands for world **/
-	protected InputManager input;
+        if( map != null ) {
+            renderMap( g, container );
+        }
 
-	public World(int id) {
-		this.id = id;
-	}
+        // render entities
+        for( Entity e : quadtree.getEntities( camera.getVisibleRect() ) ) {
+            if( !e.visible && !ME.debugEnabled ) {
+                continue; // next entity. this one stays invisible
+            }
+            renderEntity( e, g, container );
+        }
 
-	public World(int id, GameContainer container) {
-		this.id = id;
-		this.container = container;
-	}
+        // render particle system
+        if( ME.ps != null && ME.renderParticle ) {
+            ME.ps.render();
+        }
 
-	public void init(GameContainer container, StateBasedGame game)
-			throws SlickException {
-		this.container = container;
-		input = new InputManager(container.getInput());
+        if( ME.debugEnabled ) {
+            g.draw( camera.getDeadzone() );
+            g.draw( camera.getVisibleRect() );
+            quadtree.render( g );
+        }
 
-		if (width == 0)
-			width = container.getWidth();
-		if (height == 0)
-			height = container.getHeight();
-	}
+        g.translate( camera.getX() - camera.getCameraOffset().getX(), camera.getY() - camera.getCameraOffset().getY() );
 
-	@Override
-	public void enter(GameContainer container, StateBasedGame game)
-			throws SlickException {
-		ME.world = this;
-	}
+        // finally render entities above camera
+        for( Entity e : aboveCamera ) {
+            if( !e.visible ) {
+                continue;
+            }
+            renderEntity( e, g, container );
+        }
 
-	public void render(GameContainer container, StateBasedGame game, Graphics g)
-			throws SlickException {
+        ME.render( container, game, g );
+    }
 
-		renderedEntities = 0;
-		// first render entities below camera
-		for (Entity e : belowCamera) {
-			if (!e.visible)
-				continue;
-			renderEntity(e, g, container);
-		}
-		// center to camera position
-		if (camera != null)
-			g.translate(-camera.cameraX, -camera.cameraY);
+    private void renderEntity( Entity e, Graphics g, GameContainer container )
+            throws SlickException {
+        renderedEntities++;
+        e.render( container, g );
+    }
 
-		// render entities
-		for (Entity e : entities) {
-			if (!e.visible)
-				continue; // next entity. this one stays invisible
-			if (camera != null) {
-				if (camera.contains(e)) {
-					renderEntity(e, g, container);
-				}
-			} else {
-				renderEntity(e, g, container);
-			}
-		}
+    private void renderMap( Graphics g, GameContainer container )
+            throws SlickException {
+        for( int layerIndex = 0; layerIndex < map.getLayerCount(); layerIndex++ ) {
+            if( (ME.debugEnabled || map.isToBeRendered( layerIndex )) ) {
+                map.render( (int)camera.getCameraOffset().getX(),
+                            (int)camera.getCameraOffset().getY(),
+                            (int)camera.getX() / map.getTileWidth(),
+                            (int)camera.getY() / map.getTileHeight(),
+                            camera.getWidth() / map.getTileWidth(),
+                            camera.getHeight() / map.getTileHeight(),
+                            layerIndex,
+                            false );
+            }
+        }
+    }
 
-		// render particle system
-		if (ME.ps != null && ME.renderParticle) {
-			ME.ps.render();
-		}
+    @Override
+    public void update( GameContainer container, StateBasedGame game, int delta )
+            throws SlickException {
+        if( container == null ) {
+            throw new SlickException( "no container set" );
+        }
 
-		if (ME.debugEnabled && camera != null) {
-			if (camera.getMoveRect() != null)
-				g.draw(camera.getMoveRect());
-		}
+        // store the current delta in ME for anyone who's interested in it.
+        ME.delta = delta;
 
-		if (camera != null)
-			g.translate(camera.cameraX, camera.cameraY);
+        // add new entities
+        if( addable.size() > 0 ) {
+            for( Entity entity : addable ) {
+                quadtree.insert( entity );
+                entity.addedToWorld();
+            }
+            addable.clear();
+        }
 
-		// finally render entities above camera
-		for (Entity e : aboveCamera) {
-			if (!e.visible)
-				continue;
-			renderEntity(e, g, container);
-		}
+        // update entities
+        for( Entity e : belowCamera ) {
+            e.updateAlarms( delta );
+            if( e.active ) {
+                e.update( container, delta );
+            }
+        }
+        for( Entity e : quadtree.getAllEntities() ) {
+            e.updateAlarms( delta );
+            if( e.active ) {
+                e.update( container, delta );
+            }
+            // check for wrapping or out of world entities
+            e.checkWorldBoundaries();
+        }
+        for( Entity e : aboveCamera ) {
+            e.updateAlarms( delta );
+            if( e.active ) {
+                e.update( container, delta );
+            }
+        }
 
-		ME.render(container, game, g);
-	}
+        // update particle system
+        if( ME.ps != null ) {
+            ME.ps.update( delta );
+        }
 
-	private void renderEntity(Entity e, Graphics g, GameContainer container)
-			throws SlickException {
-		renderedEntities++;
-		if (ME.debugEnabled && e.collidable) {
-			g.setColor(ME.borderColor);
-			Rectangle hitBox = new Rectangle(e.x + e.hitboxOffsetX, e.y
-					+ e.hitboxOffsetY, e.hitboxWidth, e.hitboxHeight);
-			g.draw(hitBox);
-			g.setColor(Color.white);
-		}
-		e.render(container, g);
-	}
+        // remove signed entities
+        for( Entity entity : removable ) {
+            quadtree.remove( entity );
+            belowCamera.remove( entity );
+            aboveCamera.remove( entity );
+            entity.removedFromWorld();
+        }
+        removable.clear();
+        camera.update( delta );
 
-	public void update(GameContainer container, StateBasedGame game, int delta)
-			throws SlickException {
-		if (container == null)
-			throw new SlickException("no container set");
+        ME.update( container, game, delta );
+    }
 
-		// store the current delta in ME for anyone who's interested in it.
-		ME.delta = delta;
+    @Override
+    public int getID() {
+        return id;
+    }
 
-		// add new entities
-		if (addable.size() > 0) {
-			for (Entity entity : addable) {
-				entities.add(entity);
-				entity.addedToWorld();
-			}
-			addable.clear();
-			Collections.sort(entities);
-		}
+    /**
+     * Add entity to world and sort entity in z order
+     *
+     * @param e entity to add
+     */
+    public void add( Entity e, int... flags ) {
+        e.setWorld( this );
+        if( flags.length == 1 ) {
+            switch( flags[0] ) {
+                case BELOW:
+                    belowCamera.add( e );
+                    break;
+                case GAME:
+                    addable.add( e );
+                    break;
+                case ABOVE:
+                    aboveCamera.add( e );
+                    break;
+            }
+        }
+        else {
+            addable.add( e );
+        }
+    }
 
-		// update entities
-		for (Entity e : belowCamera) {
-			e.updateAlarms(delta);
-			if (e.active)
-				e.update(container, delta);
-		}
-		for (Entity e : entities) {
-			e.updateAlarms(delta);
-			if (e.active)
-				e.update(container, delta);
-			// check for wrapping or out of world entities
-			e.checkWorldBoundaries();
-		}
-		for (Entity e : aboveCamera) {
-			e.updateAlarms(delta);
-			if (e.active)
-				e.update(container, delta);
-			// check for wrapping or out of world entities
-			// TODO: comment for a test
-			// e.checkWorldBoundaries();
-		}
+    public void addAll( Collection<Entity> e, int... flags ) {
+        for( Entity entity : e ) {
+            this.add( entity, flags );
+        }
+    }
 
-		// update particle system
-		if (ME.ps != null) {
-			ME.ps.update(delta);
-		}
+    /**
+     * @return List of entities currently in this world
+     */
+    public List<Entity> getEntities() {
+        return quadtree.getAllEntities();
+    }
 
-		// remove signed entities
-		for (Entity entity : removable) {
-			entities.remove(entity);
-			belowCamera.remove(entity);
-			aboveCamera.remove(entity);
-			entity.removedFromWorld();
-		}
-		removable.clear();
+    /**
+     *
+     * @param type
+     * The entity type to count
+     *
+     * @return number of entities of the given type in this world
+     */
+    public int getNrOfEntities( String type ) {
+        int number = 0;
+        for( Entity entity : quadtree.getAllEntities() ) {
+            if( entity.isType( type ) ) {
+                number++;
+            }
+        }
+        return number;
+    }
 
-		// update camera
-		if (camera != null) {
-			camera.update(container, delta);
-		}
+    public List<Entity> getEntities( String type ) {
+        List<Entity> res = new ArrayList<>();
+        for( Entity entity : quadtree.getAllEntities() ) {
+            if( entity.isType( type ) ) {
+                res.add( entity );
+            }
+        }
+        return res;
+    }
 
-		ME.update(container, game, delta);
-	}
+    public List<Entity> getEntities( Rectangle rect ) {
+        return quadtree.getEntities( rect );
+    }
 
-	@Override
-	public int getID() {
-		return id;
-	}
+    public List<Entity> getEntities( Vector2f point ) {
+        return quadtree.getEntities( point );
+    }
 
-	/**
-	 * Add entity to world and sort entity in z order
-	 * 
-	 * @param e
-	 *            entity to add
-	 */
-	public void add(Entity e, int... flags) {
-		e.setWorld(this);
-		if (flags.length == 1) {
-			switch (flags[0]) {
-				case BELOW :
-					belowCamera.add(e);
-					break;
-				case GAME :
-					addable.add(e);
-					break;
-				case ABOVE :
-					aboveCamera.add(e);
-					break;
-			}
-		} else
-			addable.add(e);
-	}
+    public void setMap( Map map ) {
+        this.map = map;
+    }
 
-	public void addAll(Collection<Entity> e, int... flags) {
-		for (Entity entity : e) {
-			this.add(entity, flags);
-		}
-	}
+    public Map getMap() {
+        return map;
+    }
 
-	/**
-	 * @return List of entities currently in this world
-	 */
-	public List<Entity> getEntities() {
-		return entities;
-	}
+    /**
+     * @param entity
+     * to remove from game
+     *
+     * @return false if entity is already set to be remove
+     */
+    public boolean remove( Entity entity ) {
+        if( !removable.contains( entity ) ) {
+            return removable.add( entity );
+        }
+        return false;
+    }
 
-	/**
-	 *
-	 * @param type
-	 *            The entity type to count
-	 * @return number of entities of the given type in this world
-	 */
-	public int getNrOfEntities(String type) {
-		if (entities.size() > 0) {
-			int number = 0;
-			for (Entity entity : entities) {
-				if (entity.isType(type))
-					number++;
-			}
-			return number;
-		}
-		return 0;
-	}
+    /**
+     * @param name
+     *
+     * @return null if name is null or if no entity is found in game, entity
+     * otherwise
+     */
+    public Entity find( String name ) {
+        if( name == null ) {
+            return null;
+        }
+        for( Entity entity : quadtree.getAllEntities() ) {
+            if( entity.name != null && entity.name.equalsIgnoreCase( name ) ) {
+                return entity;
+            }
+        }
+        // also look in addable list
+        for( Entity entity : addable ) {
+            if( entity.name != null && entity.name.equalsIgnoreCase( name ) ) {
+                return entity;
+            }
+        }
+        // and look in aboveCamera and belowCamera list
+        for( Entity entity : aboveCamera ) {
+            if( entity.name != null && entity.name.equalsIgnoreCase( name ) ) {
+                return entity;
+            }
+        }
+        for( Entity entity : belowCamera ) {
+            if( entity.name != null && entity.name.equalsIgnoreCase( name ) ) {
+                return entity;
+            }
+        }
+        return null;
+    }
 
-	public List<Entity> getEntities(String type) {
-		if (entities.size() > 0) {
-			List<Entity> res = new ArrayList<Entity>();
-			for (Entity entity : entities) {
-				if (entity.isType(type))
-					res.add(entity);
-			}
-			return res;
-		}
-		return new ArrayList<Entity>();
-	}
+    /**
+     * Remove all entities
+     */
+    public void clear() {
+        for( Entity entity : quadtree.getAllEntities() ) {
+            entity.removedFromWorld();
+        }
+        belowCamera.clear();
+        aboveCamera.clear();
+        quadtree.destroy();
+        addable.clear();
+        removable.clear();
+    }
 
-	/**
-	 * @param entity
-	 *            to remove from game
-	 * @return false if entity is already set to be remove
-	 */
-	public boolean remove(Entity entity) {
-		if (!removable.contains(entity)) {
-			return removable.add(entity);
-		}
-		return false;
-	}
+    public int getWidth() {
+        return width;
+    }
 
-	/**
-	 * @param name
-	 * @return null if name is null or if no entity is found in game, entity
-	 *         otherwise
-	 */
-	public Entity find(String name) {
-		if (name == null)
-			return null;
-		for (Entity entity : entities) {
-			if (entity.name != null && entity.name.equalsIgnoreCase(name)) {
-				return entity;
-			}
-		}
-		// also look in addable list
-		for (Entity entity : addable) {
-			if (entity.name != null && entity.name.equalsIgnoreCase(name)) {
-				return entity;
-			}
-		}
-		// and look in aboveCamera and belowCamera list
-		for (Entity entity : aboveCamera) {
-			if (entity.name != null && entity.name.equalsIgnoreCase(name)) {
-				return entity;
-			}
-		}
-		for (Entity entity : belowCamera) {
-			if (entity.name != null && entity.name.equalsIgnoreCase(name)) {
-				return entity;
-			}
-		}
-		return null;
-	}
+    public void setWidth( int width ) {
+        this.width = width;
+        camera.setSceneWidth( width );
+    }
 
-	/**
-	 * Remove all entities
-	 */
-	public void clear() {
-		for (Entity entity : entities) {
-			entity.removedFromWorld();
-		}
-		belowCamera.clear();
-		aboveCamera.clear();
-		entities.clear();
-		addable.clear();
-		removable.clear();
-	}
+    public int getHeight() {
+        return height;
+    }
 
-	public void setCamera(Camera camera) {
-		this.camera = camera;
-		this.camera.setMyWorld(this);
-	}
+    public void setHeight( int height ) {
+        this.height = height;
+        camera.setSceneHeight( height );
+    }
 
-	public void setCameraOn(Entity entity) {
-		if (camera == null) {
-			this.setCamera(new Camera(this, entity, this.container.getWidth(),
-					this.container.getHeight()));
-		}
-		this.camera.setFollow(entity);
-	}
+    public boolean contains( Entity entity ) {
+        return contains( entity.getBounds() );
+    }
 
-	public int getWidth() {
-		return width;
-	}
+    public boolean contains( float x, float y, int width, int height ) {
+        return x >= 0 && y >= 0 && x + width <= this.width
+               && y + height <= this.height;
+    }
 
-	public void setWidth(int width) {
-		this.width = width;
-	}
+    public boolean contains( Rectangle rectangle ) {
+        return new Rectangle( 0, 0, width, height ).contains( rectangle );
+    }
 
-	public int getHeight() {
-		return height;
-	}
+    public List<Entity> findEntityWithType( String type ) {
+        if( type == null ) {
+            Log.error( "Parameter must be not null" );
+            return new ArrayList<>();
+        }
+        List<Entity> result = new ArrayList<>();
+        for( Entity entity : quadtree.getAllEntities() ) {
+            if( entity.isType( type ) ) {
+                result.add( entity );
+            }
+        }
+        return result;
+    }
 
-	public void setHeight(int height) {
-		this.height = height;
-	}
+    public void resize( int width, int height ) {
+        quadtree.resize( width, height );
+    }
 
-	public boolean contains(Entity entity) {
-		return contains(entity.x, entity.y, entity.width, entity.height);
-	}
+    public void moveEntity( Entity entity ) {
+        quadtree.move( entity );
+    }
 
-	public boolean contains(float x, float y, int width, int height) {
-		return x >= 0 && y >= 0 && x + width <= this.width
-				&& y + height <= this.height;
-	}
+    /**
+     * @param x
+* ram y
+     *
+     * @return true if an entity is already in position
+     */
+    public boolean isEmpty( int x, int y, int depth ) {
+        for( Entity entity : quadtree.getEntities( new Vector2f( x, y ) ) ) {
+            if( entity.depth == depth ) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-	public List<Entity> findEntityWithType(String type) {
-		if (type == null) {
-			Log.error("Parameter must be not null");
-			return new ArrayList<Entity>();
-		}
-		List<Entity> result = new ArrayList<Entity>();
-		for (Entity entity : entities) {
-			if (entity.isType(type)) {
-				result.add(entity);
-			}
-		}
-		return result;
-	}
+    public Entity find( int x, int y ) {
+        for( Entity entity : quadtree.getEntities( new Vector2f( x, y ) ) ) {
+            return entity;
+        }
+        return null;
+    }
 
-	/**
-	 * @param x
-	 * @param y
-	 * @return true if an entity is already in position
-	 */
-	public boolean isEmpty(int x, int y, int depth) {
-		Rectangle rect;
-		for (Entity entity : entities) {
-			rect = new Rectangle(entity.x, entity.y, entity.width,
-					entity.height);
-			if (entity.depth == depth && rect.contains(x, y)) {
-				return false;
-			}
-		}
-		return true;
-	}
+    /**
+     * @return get number of entities in this world
+     */
+    public int getCount() {
+        return quadtree.getAllEntities().size();
+    }
 
-	public Entity find(int x, int y) {
-		Rectangle rect;
-		for (Entity entity : entities) {
-			rect = new Rectangle(entity.x, entity.y, entity.width,
-					entity.height);
-			if (rect.contains(x, y)) {
-				return entity;
-			}
-		}
-		return null;
-	}
+    /**
+     * @see #bindToKey(String, int...)
+     */
+    public void define( String command, int... keys ) {
+        bindToKey( command, keys );
+    }
 
-	/**
-	 * @return get number of entities in this world
-	 */
-	public int getCount() {
-		return entities.size();
-	}
+    /**
+     * @see InputManager#bindToKey(String, int...)
+     */
+    public void bindToKey( String command, int... keys ) {
+        input.bindToKey( command, keys );
+    }
 
-	/**
-	 * @see #bindToKey(String, int...)
-	 */
-	public void define(String command, int... keys) {
-		bindToKey(command, keys);
-	}
+    /**
+     * @see InputManager#bindToMouse(String, int...)
+     */
+    public void bindToMouse( String command, int... buttons ) {
+        input.bindToMouse( command, buttons );
+    }
 
-	/**
-	 * @see InputManager#bindToKey(String, int...)
-	 */
-	public void bindToKey(String command, int... keys) {
-		input.bindToKey(command, keys);
-	}
+    /**
+     * @see InputManager#isDown(String)
+     */
+    public boolean check( String command ) {
+        return input.isDown( command );
+    }
 
-	/**
-	 * @see InputManager#bindToMouse(String, int...)
-	 */
-	public void bindToMouse(String command, int... buttons) {
-		input.bindToMouse(command, buttons);
-	}
-
-	/**
-	 * @see InputManager#isDown(String)
-	 */
-	public boolean check(String command) {
-		return input.isDown(command);
-	}
-
-	/**
-	 * @see InputManager#isPressed(String)
-	 */
-	public boolean pressed(String command) {
-		return input.isPressed(command);
-	}
-
+    /**
+     * @see InputManager#isPressed(String)
+     */
+    public boolean pressed( String command ) {
+        return input.isPressed( command );
+    }
 }

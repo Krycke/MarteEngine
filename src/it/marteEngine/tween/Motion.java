@@ -11,8 +11,14 @@ public abstract class Motion extends Tween {
 	/** the coordinates of the motion */
 	protected float x, y;
 
-	public Motion(float duration, TweenerMode type, int easingType) {
-		super(duration, type, easingType);
+	public Motion(float duration, TweenerMode type, int easingType,
+			boolean active) {
+		this(duration, type, easingType, false, active);
+	}
+
+	public Motion(float duration, TweenerMode type, int easingType,
+			boolean deltaTiming, boolean active) {
+		super(duration, type, easingType, deltaTiming, active);
 	}
 
 	public float getX() {
@@ -29,11 +35,6 @@ public abstract class Motion extends Tween {
 
 	public void setY(float y) {
 		this.y = y;
-	}
-
-	public void setPosition(float x, float y) {
-		setX(x);
-		setY(y);
 	}
 
 	public Vector2f getPosition() {

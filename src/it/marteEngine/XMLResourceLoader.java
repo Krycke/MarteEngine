@@ -185,8 +185,12 @@ public class XMLResourceLoader {
 		String file = element.getAttribute("file");
 		int width = parseIntAttribute(element, "width");
 		int height = parseIntAttribute(element, "height");
-		Color transparentColor = null;
+		int space = 0;
+		if (element.hasAttribute("space")) {
+			space = parseIntAttribute(element, "space");
+		}
 
+		Color transparentColor = null;
 		if (element.hasAttribute("transparentColor")) {
 			transparentColor = decodeColor(element);
 		}
@@ -195,7 +199,7 @@ public class XMLResourceLoader {
 				"Loading spritesheet key=%s file=%s width=%s height=%s", key,
 				file, width, height));
 		ResourceManager.addSpriteSheet(key, new SpriteSheet(baseDir + file,
-				width, height, transparentColor));
+				width, height, transparentColor, space));
 	}
 
 	private Color decodeColor(Element element) {
@@ -266,7 +270,7 @@ public class XMLResourceLoader {
 
 	/**
 	 * Create an animation from a spritesheet row.
-	 * 
+	 *
 	 * @param sheet
 	 *            The spritesheet that contains the individual images.
 	 * @param row

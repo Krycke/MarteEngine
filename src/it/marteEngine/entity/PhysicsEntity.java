@@ -8,9 +8,9 @@ import org.newdawn.slick.util.Log;
 /**
  * this class only works with a fixed frame rate of 60. All calculations are
  * based on that assumption. It's okay for this little sample game
- * 
+ *
  * @author Thomas
- * 
+ *
  */
 public class PhysicsEntity extends Entity {
 
@@ -35,6 +35,7 @@ public class PhysicsEntity extends Entity {
 		addType(SOLID);
 	}
 
+    @Override
 	public void update(GameContainer container, int delta)
 			throws SlickException {
 		// update possible animation stuff
@@ -47,7 +48,7 @@ public class PhysicsEntity extends Entity {
 	/**
 	 * Moves this entity at it's current speed (speed.x, speed.y) and increases
 	 * speed based on acceleration (acceleration.x, acceleration.y)
-	 * 
+	 *
 	 * @param moveX
 	 *            include horizontal movement
 	 * @param moveY
@@ -79,7 +80,7 @@ public class PhysicsEntity extends Entity {
 
 	/**
 	 * Increases this entity's vertical speed, based on its gravity (gravity)
-	 * 
+	 *
 	 * @return void
 	 */
 	public void gravity(int delta) {
@@ -90,7 +91,7 @@ public class PhysicsEntity extends Entity {
 	/**
 	 * Slows this entity down, according to its friction (friction.x,
 	 * friction.y)
-	 * 
+	 *
 	 * @param mx
 	 *            Include horizontal movement
 	 * @param my
@@ -123,7 +124,7 @@ public class PhysicsEntity extends Entity {
 	/**
 	 * Stops entity from moving to fast, according to maxspeed (mMaxspeed.x,
 	 * mMaxspeed.y)
-	 * 
+	 *
 	 * @param mx
 	 *            Include horizontal movement
 	 * @param my
@@ -147,7 +148,7 @@ public class PhysicsEntity extends Entity {
 	/**
 	 * Moves the set entity horizontal at a given speed, checking for collisions
 	 * and slopes
-	 * 
+	 *
 	 * @param e
 	 *            The entity you want to move
 	 * @param spdx
@@ -161,7 +162,7 @@ public class PhysicsEntity extends Entity {
 			boolean moved = false;
 			boolean below = true;
 
-			if (e.collide(SOLID, e.x, e.y + 1) == null) {
+			if (e.collide(SOLID, e.getX(), e.getY() + 1) == null) {
 				below = false;
 			}
 
@@ -169,16 +170,16 @@ public class PhysicsEntity extends Entity {
 			for (int s = 0; s <= slopeHeight; s++) {
 				// if we don't hit a solid in the direction we're moving,
 				// move....
-				if (e.collide(SOLID, e.x + Math.signum(spdx), e.y - s) == null) {
+				if (e.collide(SOLID, e.getX() + Math.signum(spdx), e.getY() - s) == null) {
 					// increase/decrease positions
 					// if the player is in the way, simply don't move (but don't
 					// count it as stopping)
-					if (e.collide(PLAYER, e.x + Math.signum(spdx), e.y - s) == null) {
-						e.x += Math.signum(spdx);
+					if (e.collide(PLAYER, e.getX() + Math.signum(spdx), e.getY() - s) == null) {
+						e.move(Math.signum(spdx), 0);
 					}
 
 					// move up the slope
-					e.y -= s;
+					e.move(0, -s);
 
 					// we've moved
 					moved = true;
@@ -192,8 +193,8 @@ public class PhysicsEntity extends Entity {
 
 			// if we are now in the air, but just above a platform, move us
 			// down.
-			if (below && e.collide(SOLID, e.x, e.y + 1) == null) {
-				e.y += 1;
+			if (below && e.collide(SOLID, e.getX(), e.getY() + 1) == null) {
+				e.move(0, 1);
 			}
 
 			// if we haven't moved, set our speed to 0
@@ -208,7 +209,7 @@ public class PhysicsEntity extends Entity {
 
 	/**
 	 * Moves the set entity vertical at a given speed, checking for collisions
-	 * 
+	 *
 	 * @param e
 	 *            The entity you want to move
 	 * @param spdy
@@ -219,10 +220,10 @@ public class PhysicsEntity extends Entity {
 		// for each pixel that we will move...
 		for (int i = 0; i < Math.abs(spdy); i++) {
 			// if we DON'T collide with solid
-			if (e.collide(SOLID, e.x, e.y + Math.signum(spdy)) == null) {
+			if (e.collide(SOLID, e.getX(), e.getY() + Math.signum(spdy)) == null) {
 				// if we don't run into a player, them move us
-				if (e.collide(PLAYER, e.x, e.y + Math.signum(spdy)) == null) {
-					e.y += Math.signum(spdy);
+				if (e.collide(PLAYER, e.getX(), e.getY() + Math.signum(spdy)) == null) {
+					e.move(0, Math.signum(spdy));
 				}
 				// but note that we wont stop our movement if we hit a player.
 			} else {
@@ -239,7 +240,7 @@ public class PhysicsEntity extends Entity {
 	 * Moves an entity of the given type that is on top of this entity (if any).
 	 * Also moves player if it's on top of the entity on top of this one.
 	 * (confusing.. eh?). Mostly used for moving platforms
-	 * 
+	 *
 	 * @param type
 	 *            Entity type to check for
 	 * @param speed
@@ -247,7 +248,7 @@ public class PhysicsEntity extends Entity {
 	 * @return void
 	 */
 	public void moveontop(String type, float speed) {
-		Entity e = collide(type, x, y - 1);
+		Entity e = collide(type, getX(), getY() - 1);
 		if (e != null) {
 			motionx(e, speed);
 

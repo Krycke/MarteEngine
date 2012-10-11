@@ -1,7 +1,6 @@
 package it.marteEngine.entity;
 
 import it.marteEngine.ResourceManager;
-
 import org.newdawn.slick.GameContainer;
 import org.newdawn.slick.Image;
 import org.newdawn.slick.Input;
@@ -19,7 +18,7 @@ public class PlatformerEntity extends PhysicsEntity {
 	/**
 	 * Create a new PlatformerEntity able to jump and move around. Create a
 	 * default hitbox on image
-	 * 
+	 *
 	 * @param x
 	 * @param y
 	 * @param ref
@@ -52,7 +51,7 @@ public class PlatformerEntity extends PhysicsEntity {
 	 * Define standard platformer controls (CMD_JUMP, CMD_RIGHT, CMD_LEFT)
 	 * Override it to change default controls
 	 */
-	public void defineControls() {
+	private void defineControls() {
 		define(CMD_JUMP, Input.KEY_UP, Input.KEY_X, Input.KEY_W);
 		define(CMD_RIGHT, Input.KEY_RIGHT, Input.KEY_D);
 		define(CMD_LEFT, Input.KEY_LEFT, Input.KEY_A);
@@ -65,7 +64,7 @@ public class PlatformerEntity extends PhysicsEntity {
 
 		// are we on the ground?
 		onGround = false;
-		if (collide(SOLID, x, y + 1) != null) {
+		if (collide(SOLID, getX(), getY() + 1) != null) {
 			onGround = true;
 		}
 
@@ -118,8 +117,8 @@ public class PlatformerEntity extends PhysicsEntity {
 		// should be stopped
 		motion(true, true);
 
-		previousx = x;
-		previousy = y;
+		previousx = getX();
+		previousy = getY();
 	}
 
 	public void jump() {
